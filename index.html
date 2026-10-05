@@ -108,6 +108,35 @@ h1 { font-size: 30px; line-height: 1.1; margin: 0; letter-spacing: -0.02em; text
 .badge svg { width: 14px; height: 14px; }
 .empty { color: var(--muted); background: var(--card); border-radius: 12px; padding: 16px; font-size: 15px; }
 
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cal-nav { display: flex; gap: 6px; }
+.nav-btn {
+  border: 1px solid var(--line); background: var(--card); border-radius: 10px;
+  min-width: 42px; height: 40px; font-size: 20px; line-height: 1; padding: 0 10px;
+}
+.today-btn { font-size: 15px; font-weight: 600; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; touch-action: pan-y; }
+.wd { text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); padding: 4px 0; letter-spacing: .04em; }
+.cell {
+  border: 0; background: var(--card); border-radius: 12px; aspect-ratio: 1 / 1.05; max-width: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0;
+  font-size: 17px; font-variant-numeric: tabular-nums; position: relative;
+}
+.cell.out { background: transparent; color: var(--muted); opacity: .55; }
+.cell.today { box-shadow: inset 0 0 0 2px var(--ink); font-weight: 700; color: var(--ink); }
+.cell.sel { background: var(--ink); color: var(--card); font-weight: 700; box-shadow: none; }
+.cell.past:not(.sel):not(.today) { color: var(--muted); }
+.dots { display: flex; gap: 3px; height: 6px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--rec); }
+.cell.sel .dots i { background: var(--card); }
+.day-panel { display: flex; flex-direction: column; gap: 10px; background: var(--ink-soft); border-radius: 18px; padding: 14px; }
+.day-title { margin: 0; font-size: 20px; line-height: 1.2; text-wrap: balance; }
+.new-btn { padding: 16px; font-size: 17px; border-radius: 14px; }
+.day-panel .empty { background: transparent; padding: 2px 2px 0; }
+.time-row { display: flex; gap: 8px; flex-wrap: wrap; }
+input[type="date"], input[type="time"] {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 8px 10px; min-width: 0; font-size: 17px;
+}
 .install {
   background: var(--ink-soft); border-radius: 12px; padding: 12px 14px; font-size: 14px;
   display: flex; gap: 10px; align-items: flex-start;
@@ -178,18 +207,17 @@ textarea {
 <body>
 
 <main class="page" id="home">
-  <h1>Sprachnotizbuch</h1>
-  <p class="sub" id="today"></p>
+  <header class="cal-head">
+    <h1 id="monthTitle">Kalender</h1>
+    <div class="cal-nav">
+      <button class="nav-btn" id="prevMonth" type="button" aria-label="Vorheriger Monat">‹</button>
+      <button class="nav-btn today-btn" id="goToday" type="button">Heute</button>
+      <button class="nav-btn" id="nextMonth" type="button" aria-label="Nächster Monat">›</button>
+    </div>
+  </header>
 
-  <button class="rec-btn" id="quickRec" type="button" aria-live="polite">
-    <span class="dot"></span>
-    <span><span class="label">Schnell aufnehmen</span><span class="timer" hidden></span></span>
-    <span class="level" hidden><i></i></span>
-  </button>
-
-  <div class="row">
-    <button class="btn" id="newNote" type="button">＋ Neue Notiz</button>
-    <button class="btn" id="importHome" type="button">Sprachnachricht importieren</button>
+  <div class="cal" id="cal">
+    <div class="wd">Mo</div><div class="wd">Di</div><div class="wd">Mi</div><div class="wd">Do</div><div class="wd">Fr</div><div class="wd">Sa</div><div class="wd">So</div>
   </div>
 
   <div class="install" id="installHint" hidden>
@@ -197,10 +225,21 @@ textarea {
     <button type="button" id="installClose" aria-label="Hinweis schließen">×</button>
   </div>
 
-  <p class="section-label">Kommende Notizen</p>
-  <div class="list" id="upcoming"></div>
-  <p class="section-label" id="pastLabel" hidden>Vergangen</p>
-  <div class="list" id="past"></div>
+  <section class="day-panel" aria-live="polite">
+    <h2 class="day-title" id="dayTitle"></h2>
+    <button class="btn primary new-btn" id="newForDay" type="button">＋ Erinnerung für diesen Tag</button>
+    <div class="list" id="dayList"></div>
+  </section>
+
+  <p class="section-label">Schnell festhalten</p>
+  <div class="row">
+    <button class="rec-btn small" id="quickRec" type="button" aria-live="polite">
+      <span class="dot"></span>
+      <span><span class="label">Jetzt aufnehmen</span><span class="timer" hidden></span></span>
+      <span class="level" hidden><i></i></span>
+    </button>
+    <button class="btn" id="importHome" type="button" style="flex: 0 1 170px;">Sprachnachricht importieren</button>
+  </div>
 </main>
 
 <section class="sheet" id="sheet" hidden aria-label="Notiz">
@@ -217,25 +256,28 @@ textarea {
       </div>
     </div>
 
-    <input class="title-input" id="noteTitle" placeholder="Titel, z. B. Arzttermin" autocomplete="off">
+    <input class="title-input" id="noteTitle" placeholder="Woran erinnern? z. B. Arzttermin" autocomplete="off">
 
     <div class="field">
-      <label for="noteDate">Wann</label>
-      <input type="datetime-local" id="noteDate" step="300">
+      <span>Wann</span>
+      <div class="time-row">
+        <input type="date" id="noteDay" aria-label="Datum">
+        <input type="time" id="noteTime" step="300" aria-label="Uhrzeit">
+      </div>
     </div>
 
-    <p class="section-label">Sprachnachrichten</p>
-    <div class="list" id="recordings"></div>
+    <p class="section-label">Sprachnotiz</p>
     <div class="row">
       <button class="rec-btn small" id="noteRec" type="button" aria-live="polite">
         <span class="dot"></span>
-        <span><span class="label">Aufnehmen</span><span class="timer" hidden></span></span>
+        <span><span class="label">Sprachnotiz aufnehmen</span><span class="timer" hidden></span></span>
         <span class="level" hidden><i></i></span>
       </button>
       <button class="btn" id="importNote" type="button" style="flex: 0 1 150px;">Importieren</button>
     </div>
+    <div class="list" id="recordings"></div>
 
-    <p class="section-label">Notiz</p>
+    <p class="section-label">Text (optional)</p>
     <textarea id="noteBody" placeholder="Hier kannst du schreiben …"></textarea>
 
     <p class="section-label">Kalender</p>
@@ -400,6 +442,8 @@ async function toggleRecording(button, onDone) {
   } catch { /* ohne Pegelanzeige weiter */ }
   const timerInterval = setInterval(() => { timerEl.textContent = '● ' + duration(Date.now() - started); }, 500);
 
+  let finished;
+  const done = new Promise((r) => { finished = r; });
   mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
   mr.onstop = async () => {
     clearInterval(timerInterval);
@@ -411,12 +455,14 @@ async function toggleRecording(button, onDone) {
     timerEl.hidden = true; levelEl.hidden = true;
     recorder.active = null;
     const blob = new Blob(chunks, { type: mr.mimeType || mimeType || 'audio/webm' });
-    if (blob.size === 0) { toast('Die Aufnahme war leer.'); return; }
-    await onDone(blob, Date.now() - started);
+    try {
+      if (blob.size === 0) toast('Die Aufnahme war leer.');
+      else await onDone(blob, Date.now() - started);
+    } finally { finished(); }
   };
 
   mr.start(1000);
-  recorder.active = { button, stop: () => mr.state !== 'inactive' && mr.stop() };
+  recorder.active = { button, stop: () => { if (mr.state !== 'inactive') mr.stop(); return done; } };
   button.classList.add('recording');
   labelEl.textContent = 'Stopp & speichern';
   timerEl.hidden = false; levelEl.hidden = false;
@@ -438,63 +484,127 @@ async function addRecording(noteId, blob, fields) {
   return rec;
 }
 
-/* ---------- Startseite ---------- */
+/* ---------- Startseite: Kalender ---------- */
 let freshNoteId = null;
+let selectedDay = new Date(startOfDay(new Date()));
+let viewMonth = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), 1);
+const dayKey = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 
 async function renderHome() {
-  $('today').textContent = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const [notes, recs] = await Promise.all([dbAll('notes'), dbAll('recordings')]);
   const counts = {};
   for (const r of recs) counts[r.noteId] = (counts[r.noteId] || 0) + 1;
-  const today = startOfDay(new Date());
-  notes.sort((a, b) => a.date.localeCompare(b.date));
-  const upcoming = notes.filter((n) => new Date(n.date).getTime() >= today);
-  const past = notes.filter((n) => new Date(n.date).getTime() < today).reverse();
-
-  fillList($('upcoming'), upcoming, counts,
-    'Noch nichts geplant. Tippe auf „Schnell aufnehmen“ oder lege eine neue Notiz für einen Termin an.');
-  $('pastLabel').hidden = past.length === 0;
-  fillList($('past'), past, counts, null);
+  const byDay = {};
+  for (const n of notes) (byDay[dayKey(new Date(n.date))] ||= []).push(n);
+  renderCalendar(byDay);
+  renderDay(byDay[dayKey(selectedDay)] || [], counts);
 }
 
-function fillList(container, notes, counts, emptyText) {
-  container.replaceChildren();
-  if (notes.length === 0) {
-    if (emptyText) container.append(el('div', { class: 'empty' }, emptyText));
+function renderCalendar(byDay) {
+  $('monthTitle').textContent = viewMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+  const cal = $('cal');
+  cal.querySelectorAll('.cell').forEach((c) => c.remove());
+  const first = new Date(viewMonth);
+  const offset = (first.getDay() + 6) % 7; // Woche beginnt am Montag
+  const start = new Date(first.getFullYear(), first.getMonth(), 1 - offset);
+  const todayKey = dayKey(new Date());
+  const today0 = startOfDay(new Date());
+  const selKey = dayKey(selectedDay);
+  const weeks = Math.ceil((offset + new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()) / 7);
+  for (let i = 0; i < weeks * 7; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const key = dayKey(d);
+    const n = (byDay[key] || []).length;
+    const cls = ['cell'];
+    if (d.getMonth() !== viewMonth.getMonth()) cls.push('out');
+    if (key === todayKey) cls.push('today');
+    if (key === selKey) cls.push('sel');
+    if (d.getTime() < today0) cls.push('past');
+    const dots = el('span', { class: 'dots' });
+    for (let k = 0; k < Math.min(n, 3); k++) dots.append(el('i'));
+    const label = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }) +
+      (n ? ', ' + n + (n === 1 ? ' Erinnerung' : ' Erinnerungen') : '');
+    cal.append(el('button', { class: cls.join(' '), type: 'button', 'aria-label': label, 'aria-pressed': key === selKey ? 'true' : 'false',
+      onclick: () => selectDay(d) }, el('span', {}, String(d.getDate())), dots));
+  }
+}
+
+function selectDay(d) {
+  selectedDay = new Date(startOfDay(d));
+  if (d.getMonth() !== viewMonth.getMonth() || d.getFullYear() !== viewMonth.getFullYear()) {
+    viewMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+  renderHome();
+}
+
+function renderDay(notes, counts) {
+  const d = selectedDay;
+  const rel = dayLabel(d);
+  const full = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('dayTitle').textContent = /^(Heute|Morgen|Übermorgen|Gestern)$/.test(rel) ? rel + ', ' + full : full;
+  const list = $('dayList');
+  list.replaceChildren();
+  notes.sort((a, b) => a.date.localeCompare(b.date));
+  if (!notes.length) {
+    list.append(el('div', { class: 'empty' }, 'Noch keine Erinnerung an diesem Tag.'));
     return;
   }
-  let lastDay = null;
   for (const n of notes) {
-    const d = new Date(n.date);
-    const day = startOfDay(d);
-    if (day !== lastDay) { container.append(el('div', { class: 'day' }, dayLabel(d))); lastDay = day; }
+    const t = new Date(n.date);
     const badges = el('span', { class: 'badge' });
     if (counts[n.id]) badges.insertAdjacentHTML('beforeend', ICON_MIC + counts[n.id]);
     if (n.calendarAt) badges.insertAdjacentHTML('beforeend', ICON_CAL);
-    container.append(el('button', {
+    list.append(el('button', {
       class: 'note-row' + (n.id === freshNoteId ? ' fresh' : ''), type: 'button', onclick: () => openNote(n.id),
     },
-      el('span', { class: 'time' }, timeLabel(d)),
+      el('span', { class: 'time' }, timeLabel(t)),
       el('span', { class: 'main' },
-        el('div', { class: 'title' }, n.title || 'Ohne Titel'),
+        el('div', { class: 'title' }, n.title || (counts[n.id] ? 'Sprachnotiz' : 'Ohne Titel')),
         n.body ? el('div', { class: 'preview' }, n.body.split('\n')[0]) : null),
       badges));
   }
 }
+
+function shiftMonth(delta) {
+  viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + delta, 1);
+  renderHome();
+}
+$('prevMonth').addEventListener('click', () => shiftMonth(-1));
+$('nextMonth').addEventListener('click', () => shiftMonth(1));
+$('goToday').addEventListener('click', () => selectDay(new Date()));
+// Wischen links/rechts wechselt den Monat
+let touchX = null;
+$('cal').addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+$('cal').addEventListener('touchend', (e) => {
+  if (touchX == null) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  touchX = null;
+  if (Math.abs(dx) > 60) shiftMonth(dx < 0 ? 1 : -1);
+});
+
+$('newForDay').addEventListener('click', async () => {
+  const d = new Date(selectedDay);
+  if (startOfDay(d) === startOfDay(new Date())) {
+    const h = nextFullHour();
+    d.setHours(h.getHours(), 0, 0, 0);
+    if (h.getDate() !== d.getDate()) d.setHours(23, 0, 0, 0);
+  } else {
+    d.setHours(9, 0, 0, 0);
+  }
+  const note = await createNote({ date: d.toISOString() });
+  openNote(note.id);
+});
 
 $('quickRec').addEventListener('click', () => toggleRecording($('quickRec'), async (blob, ms) => {
   const now = new Date();
   const note = await createNote({ title: 'Sprachnotiz ' + timeLabel(now), date: now.toISOString() });
   await addRecording(note.id, blob, { durationMs: ms, label: 'Aufnahme ' + timeLabel(now) });
   freshNoteId = note.id;
+  selectedDay = new Date(startOfDay(now));
+  viewMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   await renderHome();
   toast('Gespeichert.', 'Öffnen', () => openNote(note.id));
 }));
-
-$('newNote').addEventListener('click', async () => {
-  const note = await createNote({ date: nextFullHour().toISOString() });
-  openNote(note.id, true);
-});
 
 /* ---------- Import ---------- */
 let importTarget = null; // null = neue Notiz, sonst noteId
@@ -543,7 +653,9 @@ async function openNote(id, isNew) {
   currentNote = note;
   $('noteTitle').value = note.title;
   $('noteBody').value = note.body;
-  $('noteDate').value = toLocalInput(new Date(note.date));
+  const nd = new Date(note.date);
+  $('noteDay').value = toLocalInput(nd).slice(0, 10);
+  $('noteTime').value = timeLabel(nd);
   $('confirmDelete').hidden = true;
   updateCalendarUi();
   await renderRecordings();
@@ -557,8 +669,17 @@ async function openNote(id, isNew) {
 }
 
 async function closeNote(fromHistory) {
-  if (recorder.active && recorder.active.button === $('noteRec')) recorder.active.stop();
+  if (recorder.active && recorder.active.button === $('noteRec')) await recorder.active.stop();
   await saveNow();
+  const closing = currentNote;
+  // Leere Erinnerung (nichts aufgenommen, nichts geschrieben) wieder entfernen
+  if (closing && !closing.title.trim() && !closing.body.trim() && (await recordingsOf(closing.id)).length === 0) {
+    await dbDel('notes', closing.id);
+  } else if (closing) {
+    const d = new Date(closing.date);
+    selectedDay = new Date(startOfDay(d));
+    viewMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  }
   document.querySelectorAll('#recordings audio').forEach((a) => a.pause());
   objectUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
   $('sheet').hidden = true;
@@ -574,8 +695,9 @@ function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNo
 async function saveNow() {
   clearTimeout(saveTimer);
   if (!currentNote) return;
-  const dateVal = $('noteDate').value;
-  const date = dateVal ? new Date(dateVal) : new Date(currentNote.date);
+  const dayVal = $('noteDay').value;
+  const timeVal = $('noteTime').value || timeLabel(new Date(currentNote.date));
+  const date = dayVal ? new Date(dayVal + 'T' + timeVal) : new Date(currentNote.date);
   Object.assign(currentNote, {
     title: $('noteTitle').value,
     body: $('noteBody').value,
@@ -585,8 +707,10 @@ async function saveNow() {
   await dbPut('notes', currentNote);
   updateCalendarUi();
 }
-['noteTitle', 'noteBody', 'noteDate'].forEach((id) => $(id).addEventListener('input', scheduleSave));
-$('noteDate').addEventListener('change', saveNow);
+['noteTitle', 'noteBody', 'noteDay', 'noteTime'].forEach((id) => {
+  $(id).addEventListener('input', scheduleSave);
+  $(id).addEventListener('change', saveNow);
+});
 
 async function renderRecordings() {
   const box = $('recordings');
@@ -672,11 +796,14 @@ function audioItem(rec) {
   return row;
 }
 
-$('noteRec').addEventListener('click', () => toggleRecording($('noteRec'), async (blob, ms) => {
-  if (!currentNote) return;
-  await addRecording(currentNote.id, blob, { durationMs: ms, label: 'Aufnahme ' + timeLabel(new Date()) });
-  await renderRecordings();
-}));
+$('noteRec').addEventListener('click', () => {
+  const noteId = currentNote && currentNote.id;
+  if (!noteId) return;
+  toggleRecording($('noteRec'), async (blob, ms) => {
+    await addRecording(noteId, blob, { durationMs: ms, label: 'Aufnahme ' + timeLabel(new Date()) });
+    if (currentNote && currentNote.id === noteId) await renderRecordings();
+  });
+});
 
 $('askDelete').addEventListener('click', () => { $('confirmDelete').hidden = false; $('sheet').scrollTop = 0; });
 $('cancelDelete').addEventListener('click', () => { $('confirmDelete').hidden = true; });
