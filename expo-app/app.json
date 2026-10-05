@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Sprachnotizbuch",
+    "slug": "sprachnotizbuch",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "de.sprachnotizbuch.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "de.sprachnotizbuch.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Sprachnotizbuch braucht das Mikrofon, damit du Sprachnachrichten zu deinen Notizen aufnehmen kannst."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Sprachnotizbuch verbindet deine Notizen mit Terminen in deinem Kalender."
+        }
+      ],
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
+    ],
+    "scheme": "sprachnotizbuch"
+  }
+}

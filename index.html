@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sprachnotizbuch</title>
+<meta name="description" content="Notizen mit Sprachnachrichten, an Datum und Uhrzeit gebunden.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#F3F4F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Notizbuch">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+/* Layout: eine Spalte, Aufnahmeknopf oben als wichtigste Aktion, Notizen als Tagesliste, Notiz öffnet als Vollbild-Blatt */
+:root {
+  --bg: #F3F4F7;
+  --card: #FFFFFF;
+  --fg: #16181D;
+  --muted: #5E6472;
+  --line: #DFE2EA;
+  --ink: #2A47C9;
+  --ink-soft: #E4E9FB;
+  --rec: #D23A2A;
+  --rec-deep: #8E1E14;
+  --imported: #0F7A86;
+  --ok: #1B7F43;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --radius: 14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111318; --card: #1B1E25; --fg: #ECEEF3; --muted: #9AA1B0; --line: #2C303A;
+    --ink: #8EA4FF; --ink-soft: #232B4A; --rec: #F0594A; --rec-deep: #7A1C13; --imported: #4EC3CF; --ok: #5BD08A;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 16px; line-height: 1.4;
+  -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.page {
+  max-width: 640px; margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: calc(env(safe-area-inset-top, 0px) + 18px) calc(env(safe-area-inset-bottom, 0px) + 40px);
+  display: flex; flex-direction: column; gap: 14px;
+}
+h1 { font-size: 30px; line-height: 1.1; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+.sub { color: var(--muted); margin: -8px 0 4px; font-size: 15px; }
+
+.rec-btn {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  border: 0; border-radius: 20px; padding: 20px 18px;
+  background: var(--rec); color: #fff; text-align: left;
+  box-shadow: 0 6px 18px -8px var(--rec);
+}
+.rec-btn.small { padding: 14px 16px; border-radius: var(--radius); box-shadow: none; }
+.rec-btn .dot { width: 22px; height: 22px; border-radius: 50%; background: #fff; flex: none; transition: border-radius .15s; }
+.rec-btn.small .dot { width: 16px; height: 16px; }
+.rec-btn .label { font-size: 19px; font-weight: 650; }
+.rec-btn.small .label { font-size: 16px; }
+.rec-btn .timer { display: block; font-size: 14px; opacity: .85; font-variant-numeric: tabular-nums; }
+.rec-btn.recording { background: var(--rec-deep); }
+.rec-btn.recording .dot { border-radius: 4px; animation: pulse 1s ease-in-out infinite alternate; }
+.level { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); overflow: hidden; min-width: 40px; }
+.level i { display: block; height: 100%; width: 0; background: #fff; transition: width .08s linear; }
+@keyframes pulse { to { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .rec-btn.recording .dot { animation: none; } }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1 1 140px; }
+.btn {
+  border: 1px solid var(--line); background: var(--card); border-radius: var(--radius);
+  padding: 13px 14px; font-weight: 600; font-size: 15px; text-align: center;
+}
+.btn { text-decoration: none; color: var(--fg); display: inline-flex; align-items: center; justify-content: center; }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.btn.link { border: 0; background: none; color: var(--ink); padding: 6px 0; text-align: left; }
+.btn.danger { color: var(--rec); }
+
+.section-label {
+  margin: 14px 0 0; font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted);
+}
+.day { margin: 8px 0 2px; font-weight: 700; font-size: 15px; }
+.list { display: flex; flex-direction: column; gap: 6px; }
+.note-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: var(--card); border: 0; border-radius: 12px; padding: 12px 14px; text-align: left;
+}
+.note-row.fresh { box-shadow: 0 0 0 2px var(--ok); }
+.note-row .time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 46px; font-size: 15px; }
+.note-row .main { flex: 1; min-width: 0; }
+.note-row .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-row .preview { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge { font-size: 13px; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.badge svg { width: 14px; height: 14px; }
+.empty { color: var(--muted); background: var(--card); border-radius: 12px; padding: 16px; font-size: 15px; }
+
+.install {
+  background: var(--ink-soft); border-radius: 12px; padding: 12px 14px; font-size: 14px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.install p { margin: 0; flex: 1; }
+.install button { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px; }
+
+/* Notiz-Blatt */
+.sheet { position: fixed; inset: 0; background: var(--bg); overflow-y: auto; z-index: 10; -webkit-overflow-scrolling: touch; }
+.sheet-bar {
+  position: sticky; top: 0; z-index: 2; background: var(--bg);
+  display: flex; justify-content: space-between; align-items: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px 8px;
+  max-width: 640px; margin: 0 auto;
+}
+.sheet-bar .btn.link { font-size: 17px; }
+.title-input { font-size: 26px; font-weight: 700; border: 0; background: none; padding: 4px 0; width: 100%; letter-spacing: -0.01em; }
+.title-input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
+.field {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  background: var(--card); border-radius: 12px; padding: 10px 14px;
+}
+.field label { font-size: 15px; }
+input[type="datetime-local"] {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 8px 10px; min-width: 0;
+}
+textarea {
+  width: 100%; min-height: 170px; resize: vertical; border: 0; border-radius: 12px; background: var(--card);
+  padding: 14px; font-size: 16px; line-height: 1.5;
+}
+.cal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cal-actions .btn { flex: 1 1 160px; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+
+.audio {
+  display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: var(--radius); padding: 10px 12px;
+}
+.play {
+  width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--ink); color: var(--card);
+  display: grid; place-items: center; flex: none;
+}
+.audio.imported .play { background: var(--imported); }
+.play svg { width: 18px; height: 18px; fill: currentColor; }
+.audio .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.audio .name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; cursor: pointer; }
+.track i { display: block; height: 100%; width: 0; background: var(--ink); }
+.audio.imported .track i { background: var(--imported); }
+.audio .meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.audio .err { font-size: 12px; color: var(--rec); }
+.icon-btn { border: 0; background: none; color: var(--muted); padding: 8px; font-size: 18px; line-height: 1; }
+
+.confirm {
+  background: var(--card); border: 1px solid var(--rec); border-radius: 12px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.confirm p { margin: 0; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 20;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  background: var(--fg); color: var(--bg); border-radius: 12px; padding: 12px 16px; font-size: 15px;
+  max-width: calc(100% - 32px); display: flex; gap: 14px; align-items: center;
+}
+.toast button { border: 0; background: none; color: var(--bg); font-weight: 700; text-decoration: underline; padding: 0; }
+</style>
+</head>
+<body>
+
+<main class="page" id="home">
+  <h1>Sprachnotizbuch</h1>
+  <p class="sub" id="today"></p>
+
+  <button class="rec-btn" id="quickRec" type="button" aria-live="polite">
+    <span class="dot"></span>
+    <span><span class="label">Schnell aufnehmen</span><span class="timer" hidden></span></span>
+    <span class="level" hidden><i></i></span>
+  </button>
+
+  <div class="row">
+    <button class="btn" id="newNote" type="button">＋ Neue Notiz</button>
+    <button class="btn" id="importHome" type="button">Sprachnachricht importieren</button>
+  </div>
+
+  <div class="install" id="installHint" hidden>
+    <p id="installText"></p>
+    <button type="button" id="installClose" aria-label="Hinweis schließen">×</button>
+  </div>
+
+  <p class="section-label">Kommende Notizen</p>
+  <div class="list" id="upcoming"></div>
+  <p class="section-label" id="pastLabel" hidden>Vergangen</p>
+  <div class="list" id="past"></div>
+</main>
+
+<section class="sheet" id="sheet" hidden aria-label="Notiz">
+  <div class="sheet-bar">
+    <button class="btn link" id="closeNote" type="button">‹ Fertig</button>
+    <button class="btn link danger" id="askDelete" type="button">Löschen</button>
+  </div>
+  <div class="page" style="padding-top: 4px;">
+    <div class="confirm" id="confirmDelete" hidden>
+      <p>Diese Notiz mit allen Sprachnachrichten löschen? Das lässt sich nicht rückgängig machen.</p>
+      <div class="row">
+        <button class="btn" id="cancelDelete" type="button">Abbrechen</button>
+        <button class="btn danger" id="doDelete" type="button">Löschen</button>
+      </div>
+    </div>
+
+    <input class="title-input" id="noteTitle" placeholder="Titel, z. B. Arzttermin" autocomplete="off">
+
+    <div class="field">
+      <label for="noteDate">Wann</label>
+      <input type="datetime-local" id="noteDate" step="300">
+    </div>
+
+    <p class="section-label">Sprachnachrichten</p>
+    <div class="list" id="recordings"></div>
+    <div class="row">
+      <button class="rec-btn small" id="noteRec" type="button" aria-live="polite">
+        <span class="dot"></span>
+        <span><span class="label">Aufnehmen</span><span class="timer" hidden></span></span>
+        <span class="level" hidden><i></i></span>
+      </button>
+      <button class="btn" id="importNote" type="button" style="flex: 0 1 150px;">Importieren</button>
+    </div>
+
+    <p class="section-label">Notiz</p>
+    <textarea id="noteBody" placeholder="Hier kannst du schreiben …"></textarea>
+
+    <p class="section-label">Kalender</p>
+    <div class="cal-actions">
+      <button class="btn primary" id="addCal" type="button">Zum Kalender hinzufügen</button>
+      <a class="btn" id="googleCal" href="#" target="_blank" rel="noopener">Google Kalender</a>
+    </div>
+    <p class="hint" id="calHint">Trägt die Notiz als Termin mit Erinnerung in den Kalender deines Handys ein (iPhone: Apple-Kalender). Nach Änderungen einfach nochmal tippen.</p>
+  </div>
+</section>
+
+<input type="file" id="filePicker" accept="audio/*,.opus,.ogg,.oga,.m4a,.mp3,.aac,.wav,.amr,.3gp,.caf,.webm,.flac" multiple hidden>
+<div class="toast" id="toast" hidden role="status"><span id="toastText"></span><button type="button" id="toastAction" hidden></button></div>
+
+<script>
+'use strict';
+
+/* ---------- Speicher (IndexedDB, bleibt auf dem Gerät) ---------- */
+const DB_NAME = 'sprachnotizbuch';
+const DB_VERSION = 1;
+let dbPromise;
+function openDb() {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('notes')) db.createObjectStore('notes', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('recordings')) {
+          db.createObjectStore('recordings', { keyPath: 'id' }).createIndex('noteId', 'noteId');
+        }
+        if (!db.objectStoreNames.contains('inbox')) db.createObjectStore('inbox', { keyPath: 'id' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  return dbPromise;
+}
+async function run(store, mode, fn) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(store, mode);
+    const req = fn(t.objectStore(store));
+    t.oncomplete = () => resolve(req ? req.result : undefined);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+const dbAll = (store) => run(store, 'readonly', (s) => s.getAll());
+const dbGet = (store, id) => run(store, 'readonly', (s) => s.get(id));
+const dbPut = (store, value) => run(store, 'readwrite', (s) => s.put(value));
+const dbDel = (store, id) => run(store, 'readwrite', (s) => s.delete(id));
+const recordingsOf = (noteId) => run('recordings', 'readonly', (s) => s.index('noteId').getAll(noteId));
+
+function newId() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9); }
+
+/* ---------- Datum und Zeit ---------- */
+const pad = (n) => String(n).padStart(2, '0');
+function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+function dayLabel(d) {
+  const diff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86400000);
+  if (diff === 0) return 'Heute';
+  if (diff === 1) return 'Morgen';
+  if (diff === 2) return 'Übermorgen';
+  if (diff === -1) return 'Gestern';
+  return d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+const timeLabel = (d) => pad(d.getHours()) + ':' + pad(d.getMinutes());
+function toLocalInput(d) {
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + timeLabel(d);
+}
+function duration(ms) {
+  if (ms == null || !isFinite(ms)) return '–:––';
+  const s = Math.round(ms / 1000);
+  return Math.floor(s / 60) + ':' + pad(s % 60);
+}
+function nextFullHour() { const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0); return d; }
+
+/* ---------- Hilfen ---------- */
+const $ = (id) => document.getElementById(id);
+function el(tag, attrs, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const c of children) if (c != null) e.append(c);
+  return e;
+}
+const ICON_MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12h-2Z"/></svg>';
+const ICON_CAL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h2v2h6V2h2v2h3v18H4V4h3V2Zm11 8H6v10h12V10Z"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+
+let toastTimer;
+function toast(text, actionLabel, action) {
+  $('toastText').textContent = text;
+  const btn = $('toastAction');
+  btn.hidden = !actionLabel;
+  btn.textContent = actionLabel || '';
+  btn.onclick = () => { $('toast').hidden = true; action && action(); };
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $('toast').hidden = true; }, actionLabel ? 6000 : 3500);
+}
+
+/* ---------- Aufnahme ---------- */
+const recorder = { active: null };
+
+function pickMimeType() {
+  if (!window.MediaRecorder) return null;
+  const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+  return types.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+}
+
+async function toggleRecording(button, onDone) {
+  if (recorder.active) {
+    if (recorder.active.button === button) recorder.active.stop();
+    else toast('Es läuft schon eine Aufnahme.');
+    return;
+  }
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    toast('Dieser Browser kann leider nicht aufnehmen.');
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (e) {
+    toast('Kein Zugriff aufs Mikrofon. Bitte in den Browser-Einstellungen erlauben.');
+    return;
+  }
+  const mimeType = pickMimeType();
+  const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks = [];
+  const started = Date.now();
+  const timerEl = button.querySelector('.timer');
+  const levelEl = button.querySelector('.level');
+  const labelEl = button.querySelector('.label');
+  const originalLabel = labelEl.textContent;
+
+  // Pegelanzeige, damit man sieht, dass das Mikrofon etwas hört
+  let audioCtx, raf;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    const bar = levelEl.querySelector('i');
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      let peak = 0;
+      for (const v of data) peak = Math.max(peak, Math.abs(v - 128));
+      bar.style.width = Math.min(100, (peak / 64) * 100) + '%';
+      timerEl.textContent = '● ' + duration(Date.now() - started);
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch { /* ohne Pegelanzeige weiter */ }
+  const timerInterval = setInterval(() => { timerEl.textContent = '● ' + duration(Date.now() - started); }, 500);
+
+  mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  mr.onstop = async () => {
+    clearInterval(timerInterval);
+    cancelAnimationFrame(raf);
+    audioCtx && audioCtx.close();
+    stream.getTracks().forEach((t) => t.stop());
+    button.classList.remove('recording');
+    labelEl.textContent = originalLabel;
+    timerEl.hidden = true; levelEl.hidden = true;
+    recorder.active = null;
+    const blob = new Blob(chunks, { type: mr.mimeType || mimeType || 'audio/webm' });
+    if (blob.size === 0) { toast('Die Aufnahme war leer.'); return; }
+    await onDone(blob, Date.now() - started);
+  };
+
+  mr.start(1000);
+  recorder.active = { button, stop: () => mr.state !== 'inactive' && mr.stop() };
+  button.classList.add('recording');
+  labelEl.textContent = 'Stopp & speichern';
+  timerEl.hidden = false; levelEl.hidden = false;
+}
+
+/* ---------- Notizen ---------- */
+async function createNote(fields) {
+  const now = new Date().toISOString();
+  const note = { id: newId(), title: '', body: '', date: now, createdAt: now, updatedAt: now, calendarAt: null, ...fields };
+  await dbPut('notes', note);
+  return note;
+}
+async function addRecording(noteId, blob, fields) {
+  const rec = {
+    id: newId(), noteId, blob, mimeType: blob.type, durationMs: null,
+    source: 'aufnahme', label: '', createdAt: new Date().toISOString(), ...fields,
+  };
+  await dbPut('recordings', rec);
+  return rec;
+}
+
+/* ---------- Startseite ---------- */
+let freshNoteId = null;
+
+async function renderHome() {
+  $('today').textContent = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const [notes, recs] = await Promise.all([dbAll('notes'), dbAll('recordings')]);
+  const counts = {};
+  for (const r of recs) counts[r.noteId] = (counts[r.noteId] || 0) + 1;
+  const today = startOfDay(new Date());
+  notes.sort((a, b) => a.date.localeCompare(b.date));
+  const upcoming = notes.filter((n) => new Date(n.date).getTime() >= today);
+  const past = notes.filter((n) => new Date(n.date).getTime() < today).reverse();
+
+  fillList($('upcoming'), upcoming, counts,
+    'Noch nichts geplant. Tippe auf „Schnell aufnehmen“ oder lege eine neue Notiz für einen Termin an.');
+  $('pastLabel').hidden = past.length === 0;
+  fillList($('past'), past, counts, null);
+}
+
+function fillList(container, notes, counts, emptyText) {
+  container.replaceChildren();
+  if (notes.length === 0) {
+    if (emptyText) container.append(el('div', { class: 'empty' }, emptyText));
+    return;
+  }
+  let lastDay = null;
+  for (const n of notes) {
+    const d = new Date(n.date);
+    const day = startOfDay(d);
+    if (day !== lastDay) { container.append(el('div', { class: 'day' }, dayLabel(d))); lastDay = day; }
+    const badges = el('span', { class: 'badge' });
+    if (counts[n.id]) badges.insertAdjacentHTML('beforeend', ICON_MIC + counts[n.id]);
+    if (n.calendarAt) badges.insertAdjacentHTML('beforeend', ICON_CAL);
+    container.append(el('button', {
+      class: 'note-row' + (n.id === freshNoteId ? ' fresh' : ''), type: 'button', onclick: () => openNote(n.id),
+    },
+      el('span', { class: 'time' }, timeLabel(d)),
+      el('span', { class: 'main' },
+        el('div', { class: 'title' }, n.title || 'Ohne Titel'),
+        n.body ? el('div', { class: 'preview' }, n.body.split('\n')[0]) : null),
+      badges));
+  }
+}
+
+$('quickRec').addEventListener('click', () => toggleRecording($('quickRec'), async (blob, ms) => {
+  const now = new Date();
+  const note = await createNote({ title: 'Sprachnotiz ' + timeLabel(now), date: now.toISOString() });
+  await addRecording(note.id, blob, { durationMs: ms, label: 'Aufnahme ' + timeLabel(now) });
+  freshNoteId = note.id;
+  await renderHome();
+  toast('Gespeichert.', 'Öffnen', () => openNote(note.id));
+}));
+
+$('newNote').addEventListener('click', async () => {
+  const note = await createNote({ date: nextFullHour().toISOString() });
+  openNote(note.id, true);
+});
+
+/* ---------- Import ---------- */
+let importTarget = null; // null = neue Notiz, sonst noteId
+$('importHome').addEventListener('click', () => { importTarget = null; $('filePicker').click(); });
+$('importNote').addEventListener('click', () => { importTarget = currentNote && currentNote.id; $('filePicker').click(); });
+$('filePicker').addEventListener('change', async (e) => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (files.length) await importFiles(files, importTarget);
+});
+
+async function importFiles(files, noteId) {
+  let target = noteId;
+  if (!target) {
+    const note = await createNote({ title: 'Erhaltene Sprachnachricht', date: new Date().toISOString() });
+    target = note.id;
+  }
+  for (const f of files) {
+    await addRecording(target, f, { source: 'import', label: f.name || 'Sprachnachricht', mimeType: f.type });
+  }
+  if (currentNote && currentNote.id === target) await renderRecordings();
+  else openNote(target);
+  toast(files.length === 1 ? 'Sprachnachricht importiert.' : files.length + ' Sprachnachrichten importiert.');
+}
+
+/* Von Android über „Teilen“ empfangene Dateien liegen im Posteingang */
+async function checkInbox() {
+  const items = await dbAll('inbox');
+  if (!items.length) return;
+  for (const it of items) await dbDel('inbox', it.id);
+  const files = items.map((it) => new File([it.blob], it.name || 'Sprachnachricht', { type: it.blob.type }));
+  const title = items.find((it) => it.title)?.title;
+  const note = await createNote({ title: title || 'Erhaltene Sprachnachricht', date: new Date().toISOString() });
+  await importFiles(files, note.id);
+}
+
+/* ---------- Notiz-Blatt ---------- */
+let currentNote = null;
+let saveTimer = null;
+const objectUrls = [];
+
+async function openNote(id, isNew) {
+  if (currentNote && currentNote.id !== id) await saveNow();
+  const note = await dbGet('notes', id);
+  if (!note) return;
+  currentNote = note;
+  $('noteTitle').value = note.title;
+  $('noteBody').value = note.body;
+  $('noteDate').value = toLocalInput(new Date(note.date));
+  $('confirmDelete').hidden = true;
+  updateCalendarUi();
+  await renderRecordings();
+  if (!$('sheet').hidden) { /* schon offen */ } else {
+    $('sheet').hidden = false;
+    document.body.style.overflow = 'hidden';
+    history.pushState({ note: id }, '');
+  }
+  $('sheet').scrollTop = 0;
+  if (isNew) setTimeout(() => $('noteTitle').focus(), 50);
+}
+
+async function closeNote(fromHistory) {
+  if (recorder.active && recorder.active.button === $('noteRec')) recorder.active.stop();
+  await saveNow();
+  document.querySelectorAll('#recordings audio').forEach((a) => a.pause());
+  objectUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+  $('sheet').hidden = true;
+  document.body.style.overflow = '';
+  currentNote = null;
+  if (!fromHistory && history.state && history.state.note) history.back();
+  await renderHome();
+}
+$('closeNote').addEventListener('click', () => closeNote(false));
+window.addEventListener('popstate', () => { if (currentNote) closeNote(true); });
+
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 400); }
+async function saveNow() {
+  clearTimeout(saveTimer);
+  if (!currentNote) return;
+  const dateVal = $('noteDate').value;
+  const date = dateVal ? new Date(dateVal) : new Date(currentNote.date);
+  Object.assign(currentNote, {
+    title: $('noteTitle').value,
+    body: $('noteBody').value,
+    date: isNaN(date) ? currentNote.date : date.toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  await dbPut('notes', currentNote);
+  updateCalendarUi();
+}
+['noteTitle', 'noteBody', 'noteDate'].forEach((id) => $(id).addEventListener('input', scheduleSave));
+$('noteDate').addEventListener('change', saveNow);
+
+async function renderRecordings() {
+  const box = $('recordings');
+  document.querySelectorAll('#recordings audio').forEach((a) => a.pause());
+  objectUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+  box.replaceChildren();
+  const recs = (await recordingsOf(currentNote.id)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  if (!recs.length) {
+    box.append(el('div', { class: 'empty' }, 'Noch keine Sprachnachricht. Nimm eine auf oder importiere eine, die du bekommen hast.'));
+    return;
+  }
+  for (const r of recs) box.append(audioItem(r));
+}
+
+function audioItem(rec) {
+  const url = URL.createObjectURL(rec.blob);
+  objectUrls.push(url);
+  const audio = new Audio();
+  audio.preload = 'metadata';
+  audio.src = url;
+  const imported = rec.source === 'import';
+  const playBtn = el('button', { class: 'play', type: 'button', 'aria-label': 'Abspielen' });
+  playBtn.innerHTML = ICON_PLAY;
+  const fill = el('i');
+  const track = el('div', { class: 'track', role: 'presentation' }, fill);
+  const meta = el('div', { class: 'meta' });
+  const err = el('div', { class: 'err' }); err.hidden = true;
+  const created = new Date(rec.createdAt);
+  let total = rec.durationMs;
+
+  const updateMeta = () => {
+    meta.textContent = duration(audio.currentTime * 1000) + ' / ' + duration(total) + ' · ' +
+      (imported ? 'importiert am ' : 'aufgenommen am ') + pad(created.getDate()) + '.' + pad(created.getMonth() + 1) + '. um ' + timeLabel(created);
+    fill.style.width = total ? Math.min(100, (audio.currentTime * 1000 / total) * 100) + '%' : '0%';
+  };
+  audio.addEventListener('loadedmetadata', async () => {
+    if (isFinite(audio.duration) && audio.duration > 0) {
+      total = audio.duration * 1000;
+      if (!rec.durationMs) { rec.durationMs = total; await dbPut('recordings', rec); }
+    }
+    updateMeta();
+  });
+  audio.addEventListener('timeupdate', updateMeta);
+  audio.addEventListener('play', () => { playBtn.innerHTML = ICON_PAUSE; playBtn.setAttribute('aria-label', 'Pause'); });
+  audio.addEventListener('pause', () => { playBtn.innerHTML = ICON_PLAY; playBtn.setAttribute('aria-label', 'Abspielen'); });
+  audio.addEventListener('ended', () => { audio.currentTime = 0; updateMeta(); });
+  audio.addEventListener('error', () => {
+    err.hidden = false;
+    err.textContent = 'Dieses Format kann der Browser auf diesem Gerät nicht abspielen.';
+  });
+  playBtn.addEventListener('click', () => {
+    document.querySelectorAll('#recordings audio').forEach((a) => { if (a !== audio) a.pause(); });
+    if (audio.paused) audio.play().catch(() => { err.hidden = false; err.textContent = 'Abspielen nicht möglich.'; });
+    else audio.pause();
+  });
+  track.addEventListener('click', (e) => {
+    if (!total) return;
+    const r = track.getBoundingClientRect();
+    audio.currentTime = ((e.clientX - r.left) / r.width) * (total / 1000);
+  });
+
+  // Löschen mit Rückfrage direkt in der Zeile
+  const delBtn = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Sprachnachricht löschen' }, '✕');
+  const row = el('div', { class: 'audio' + (imported ? ' imported' : '') },
+    playBtn,
+    el('div', { class: 'mid' }, el('div', { class: 'name' }, rec.label || (imported ? 'Importiert' : 'Aufnahme')), track, meta, err),
+    delBtn);
+  row.append(audio);
+  audio.hidden = true;
+  delBtn.addEventListener('click', () => {
+    if (delBtn.dataset.armed) {
+      audio.pause();
+      dbDel('recordings', rec.id).then(renderRecordings);
+    } else {
+      delBtn.dataset.armed = '1';
+      delBtn.textContent = 'Löschen?';
+      delBtn.style.color = 'var(--rec)';
+      delBtn.style.fontSize = '14px';
+      setTimeout(() => { if (delBtn.isConnected) { delete delBtn.dataset.armed; delBtn.textContent = '✕'; delBtn.style.cssText = ''; } }, 3000);
+    }
+  });
+  updateMeta();
+  return row;
+}
+
+$('noteRec').addEventListener('click', () => toggleRecording($('noteRec'), async (blob, ms) => {
+  if (!currentNote) return;
+  await addRecording(currentNote.id, blob, { durationMs: ms, label: 'Aufnahme ' + timeLabel(new Date()) });
+  await renderRecordings();
+}));
+
+$('askDelete').addEventListener('click', () => { $('confirmDelete').hidden = false; $('sheet').scrollTop = 0; });
+$('cancelDelete').addEventListener('click', () => { $('confirmDelete').hidden = true; });
+$('doDelete').addEventListener('click', async () => {
+  const id = currentNote.id;
+  const recs = await recordingsOf(id);
+  for (const r of recs) await dbDel('recordings', r.id);
+  await dbDel('notes', id);
+  currentNote = null;
+  objectUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+  $('sheet').hidden = true;
+  document.body.style.overflow = '';
+  if (history.state && history.state.note) history.back();
+  await renderHome();
+  toast('Notiz gelöscht.');
+});
+
+/* ---------- Kalender ---------- */
+const EVENT_MINUTES = 30;
+function icsDate(d) {
+  return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T' +
+    pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + 'Z';
+}
+function icsText(s) { return s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1'); }
+function foldLine(line) {
+  const out = [];
+  while (line.length > 73) { out.push(line.slice(0, 73)); line = ' ' + line.slice(73); }
+  out.push(line);
+  return out.join('\r\n');
+}
+async function eventText(note) {
+  const count = (await recordingsOf(note.id)).length;
+  const parts = [];
+  if (note.body.trim()) parts.push(note.body.trim());
+  if (count) parts.push(count === 1 ? '1 Sprachnachricht im Sprachnotizbuch' : count + ' Sprachnachrichten im Sprachnotizbuch');
+  return parts.join('\n\n');
+}
+async function buildIcs(note) {
+  const start = new Date(note.date);
+  const end = new Date(start.getTime() + EVENT_MINUTES * 60000);
+  const title = note.title.trim() || 'Notiz';
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Sprachnotizbuch//DE', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    'UID:' + note.id + '@sprachnotizbuch',
+    'DTSTAMP:' + icsDate(new Date()),
+    'DTSTART:' + icsDate(start),
+    'DTEND:' + icsDate(end),
+    'SUMMARY:' + icsText(title),
+    'DESCRIPTION:' + icsText(await eventText(note)),
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsText(title), 'TRIGGER:-PT0M', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR',
+  ];
+  return lines.map(foldLine).join('\r\n') + '\r\n';
+}
+
+$('addCal').addEventListener('click', async () => {
+  await saveNow();
+  const note = currentNote;
+  const ics = await buildIcs(note);
+  const fileName = (note.title.trim() || 'Notiz').replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 40) + '.ics';
+  const file = new File([ics], fileName, { type: 'text/calendar' });
+  const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent) && 'ontouchend' in document;
+  // iPhone: Datei direkt öffnen, dann erscheint „Zum Kalender hinzufügen“.
+  // Android: über Teilen an die Kalender-App, sonst als Download.
+  if (!isApple && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: note.title || 'Notiz' }); markCalendar(); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(file);
+  const a = el('a', { href: url, download: isApple ? null : fileName });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  markCalendar();
+});
+async function markCalendar() {
+  currentNote.calendarAt = new Date().toISOString();
+  await dbPut('notes', currentNote);
+  updateCalendarUi();
+}
+function updateCalendarUi() {
+  if (!currentNote) return;
+  const start = new Date(currentNote.date);
+  const end = new Date(start.getTime() + EVENT_MINUTES * 60000);
+  const g = new URL('https://calendar.google.com/calendar/render');
+  g.searchParams.set('action', 'TEMPLATE');
+  g.searchParams.set('text', currentNote.title.trim() || 'Notiz');
+  g.searchParams.set('dates', icsDate(start) + '/' + icsDate(end));
+  g.searchParams.set('details', currentNote.body.trim());
+  $('googleCal').href = g.toString();
+  $('addCal').textContent = currentNote.calendarAt ? 'Im Kalender aktualisieren' : 'Zum Kalender hinzufügen';
+}
+$('googleCal').addEventListener('click', () => { if (currentNote) markCalendar(); });
+
+/* ---------- Installieren ---------- */
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+let deferredPrompt = null;
+function showInstallHint() {
+  try { if (localStorage.getItem('installHintClosed')) return; } catch {}
+  if (standalone) return;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
+  if (ios) {
+    $('installText').textContent = 'Als App speichern: unten auf „Teilen“ tippen (Quadrat mit Pfeil) und dann „Zum Home-Bildschirm“ wählen.';
+    $('installHint').hidden = false;
+  } else if (deferredPrompt) {
+    $('installText').textContent = '';
+    $('installText').append('Als App auf dem Startbildschirm speichern? ',
+      el('button', { type: 'button', class: 'btn link', style: 'display:inline;padding:0', onclick: async () => {
+        deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; $('installHint').hidden = true;
+      } }, 'Jetzt installieren'));
+    $('installHint').hidden = false;
+  }
+}
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; showInstallHint(); });
+$('installClose').addEventListener('click', () => {
+  $('installHint').hidden = true;
+  try { localStorage.setItem('installHintClosed', '1'); } catch {}
+});
+
+/* ---------- Start ---------- */
+(async function start() {
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  // Daten vor automatischem Löschen durch den Browser schützen
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  await renderHome();
+  showInstallHint();
+  await checkInbox();
+  if (location.search.includes('shared')) history.replaceState(history.state, '', location.pathname);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !currentNote) renderHome();
+    if (document.visibilityState === 'hidden') saveNow();
+  });
+})();
+</script>
+</body>
+</html>
