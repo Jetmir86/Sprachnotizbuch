@@ -1,7 +1,7 @@
 // Service Worker: macht die App offline nutzbar und nimmt auf Android
 // Sprachnachrichten aus dem „Teilen“-Menü (z. B. WhatsApp) entgegen.
-const CACHE = 'sprachnotizbuch-v2';
-const FILES = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
+const CACHE = 'sprachnotizbuch-v3';
+const FILES = ['./', './index.html', './manifest.webmanifest', './command.js', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
